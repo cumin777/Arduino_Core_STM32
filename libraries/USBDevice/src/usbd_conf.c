@@ -698,6 +698,32 @@ USBD_StatusTypeDef USBD_LL_PrepareReceive(USBD_HandleTypeDef *pdev,
 }
 
 /**
+  * @brief  NAK an OUT endpoint so the host retries.
+  * @param  pdev: Device handle
+  * @param  ep_addr: Endpoint Number
+  * @retval USBD Status
+  */
+USBD_StatusTypeDef USBD_LL_SuspendReceive(USBD_HandleTypeDef *pdev,
+                                         uint8_t ep_addr)
+{
+#if defined(USB)
+  PCD_HandleTypeDef *hpcd = pdev->pData;
+  /*
+   * PMA based IPs leave the OUT endpoint VALID after a received packet,
+   * so an endpoint that is not re-armed still ACKs incoming data into a
+   * stale buffer pointer. NAK it explicitly; USBD_LL_PrepareReceive()
+   * re-arms it with a fresh buffer.
+   */
+  PCD_SET_EP_RX_STATUS(hpcd->Instance, ep_addr & 0x0FU, USB_EP_RX_NAK);
+#else
+  /* OTG based IPs NAK by themselves once the transfer is complete. */
+  UNUSED(pdev);
+  UNUSED(ep_addr);
+#endif /* defined(USB) */
+  return USBD_OK;
+}
+
+/**
   * @brief  Returns the last transferred packet size.
   * @param  pdev: Device handle
   * @param  ep_addr: Endpoint Number

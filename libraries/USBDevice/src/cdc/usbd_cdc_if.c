@@ -242,13 +242,20 @@ static int8_t USBD_CDC_Receive(uint8_t *Buf, uint32_t *Len)
   receivePended = false;
   /*
    * If there is enough space in the queue for a full packet, continue receive.
-   * Else leave the OUT endpoint unarmed: it then NAKs and the host retries.
-   * USBSerial::read() and the readBytes() family call CDC_resume_receive()
-   * after dequeuing, so the endpoint is armed again with a valid block as soon
-   * as the sketch drains data. Arming it with a NULL buffer instead makes the
-   * low level driver copy the retried packet to address 0.
+   * Otherwise NAK the OUT endpoint: the host retries the data (flow control)
+   * until USBSerial::read() / readBytes() drain the queue and
+   * CDC_resume_receive() re-arms the endpoint with a fresh block.
+   *
+   * PMA based IPs keep the endpoint VALID after a received packet, so merely
+   * not re-arming it still ACKs incoming data into the stale buffer pointer
+   * that was advanced by the IRQ handler — that corrupts committed queue
+   * memory (the original regression USBD_CDC_ClearBuffer() worked around by
+   * arming with a NULL buffer, which on its own either drops data or, on some
+   * IPs, faults). Explicit NAK avoids both the corruption and the loss.
    */
-  (void)CDC_resume_receive();
+  if (!CDC_resume_receive()) {
+    USBD_CDC_SuspendReceive(&hUSBD_Device_CDC);
+  }
   return ((int8_t)USBD_OK);
 }
 

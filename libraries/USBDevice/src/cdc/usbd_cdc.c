@@ -56,6 +56,7 @@
 /* Includes ------------------------------------------------------------------*/
 #include "usbd_cdc.h"
 #include "usbd_ctlreq.h"
+#include "usbd_if.h"
 
 
 /** @addtogroup STM32_USB_DEVICE_LIBRARY
@@ -1028,6 +1029,35 @@ uint8_t USBD_CDC_ReceivePacket(USBD_HandleTypeDef *pdev)
   }
 
   return (uint8_t)USBD_OK;
+}
+
+/**
+  * @brief  USBD_CDC_SuspendReceive
+  *         NAK the CDC OUT endpoint. The host retries the data, which
+  *         provides RX flow control, until USBD_CDC_ReceivePacket()
+  *         re-arms the endpoint with a fresh queue block.
+  * @param  pdev: device instance
+  * @param  ClassId: class instance index (composite builds only)
+  * @retval status
+  */
+#ifdef USE_USBD_COMPOSITE
+uint8_t USBD_CDC_SuspendReceive(USBD_HandleTypeDef *pdev, uint8_t ClassId)
+{
+  if (pdev->pClassDataCmsit[ClassId] != NULL) {
+#else
+uint8_t USBD_CDC_SuspendReceive(USBD_HandleTypeDef *pdev)
+{
+  if (pdev->pClassDataCmsit[pdev->classId] != NULL) {
+#endif /* USE_USBD_COMPOSITE */
+#ifdef USE_USBD_COMPOSITE
+  /* Get the Endpoints addresses allocated for this class instance */
+  CDCOutEpAdd = USBD_CoreGetEPAdd(pdev, USBD_EP_OUT, USBD_EP_TYPE_BULK, (uint8_t)pdev->classId);
+#endif /* USE_USBD_COMPOSITE */
+    (void)USBD_LL_SuspendReceive(pdev, CDCOutEpAdd);
+    return (uint8_t)USBD_OK;
+  } else {
+    return (uint8_t)USBD_FAIL;
+  }
 }
 
 #endif /* USBD_USE_CDC */

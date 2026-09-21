@@ -255,6 +255,27 @@ USBD_StatusTypeDef USBD_LL_PrepareReceive(USBD_HandleTypeDef *pdev, uint8_t ep_a
   return (HAL_PCD_SetEndpointReceive(&g_hpcd, ep_addr, pbuf, size) == HAL_OK) ? USBD_OK : USBD_FAIL;
 }
 
+/**
+  * @brief  NAK an OUT endpoint so the host retries.
+  * @param  pdev: Device handle
+  * @param  ep_addr: Endpoint Number
+  * @retval USBD Status
+  */
+USBD_StatusTypeDef USBD_LL_SuspendReceive(USBD_HandleTypeDef *pdev, uint8_t ep_addr)
+{
+  (void)pdev;
+  /*
+   * Same as the HAL1 PMA path: the DRD IP leaves the endpoint VALID after
+   * a received packet in single buffer mode, so an endpoint that is not
+   * re-armed still ACKs incoming data into a stale buffer pointer. NAK it
+   * explicitly; USBD_LL_PrepareReceive() re-arms it with a fresh buffer.
+   */
+  USB_DRD_PCD_SET_EP_RX_STATUS((uint32_t)g_hpcd.instance,
+                               (usb_core_phy_ep_t)(ep_addr & HAL_PCD_EP_ADDR_MSK),
+                               USB_EP_RX_NAK);
+  return USBD_OK;
+}
+
 uint32_t USBD_LL_GetRxDataSize(USBD_HandleTypeDef *pdev, uint8_t ep_addr)
 {
   (void)pdev;
