@@ -265,14 +265,25 @@ USBD_StatusTypeDef USBD_LL_SuspendReceive(USBD_HandleTypeDef *pdev, uint8_t ep_a
 {
   (void)pdev;
   /*
-   * Same as the HAL1 PMA path: the DRD IP leaves the endpoint VALID after
-   * a received packet in single buffer mode, so an endpoint that is not
-   * re-armed still ACKs incoming data into a stale buffer pointer. NAK it
-   * explicitly; USBD_LL_PrepareReceive() re-arms it with a fresh buffer.
+   * Single buffer endpoints on the DRD IP can keep the endpoint VALID after
+   * a received packet, so an endpoint that is not re-armed still ACKs
+   * incoming data into the stale buffer pointer advanced by the IRQ
+   * handler. NAK it explicitly; USBD_LL_PrepareReceive() re-arms it with a
+   * fresh buffer.
+   *
+   * Double buffer endpoints are left alone: HAL_PCD_EP_DB_Receive() already
+   * NAKs them on transfer completion, in step with its DTOG bookkeeping.
+   * Writing the status here as well disturbs that bookkeeping when the
+   * second PMA buffer already holds a received packet, and occasionally
+   * wedges the endpoint (observed as a rare RX stall after ~91 MB of
+   * loopback traffic on STM32C5).
    */
-  USB_DRD_PCD_SET_EP_RX_STATUS((uint32_t)g_hpcd.instance,
-                               (usb_core_phy_ep_t)(ep_addr & HAL_PCD_EP_ADDR_MSK),
-                               USB_EP_RX_NAK);
+  if (g_hpcd.out_ep[ep_addr & HAL_PCD_EP_ADDR_MSK].double_buffer_en
+      == (uint8_t)USB_CORE_CONFIG_DISABLED) {
+    USB_DRD_PCD_SET_EP_RX_STATUS((uint32_t)g_hpcd.instance,
+                                 (usb_core_phy_ep_t)(ep_addr & HAL_PCD_EP_ADDR_MSK),
+                                 USB_EP_RX_NAK);
+  }
   return USBD_OK;
 }
 
